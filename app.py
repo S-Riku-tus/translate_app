@@ -18,7 +18,6 @@ from reportlab.lib.styles import ParagraphStyle
 from pdfminer.layout import LTTextBox, LAParams, LTContainer
 from pdfminer.pdfpage import PDFPage
 from pdfminer.converter import PDFPageAggregator
-from waitress import serve
 import sys
 sys.path.append(r".\transvenv\Lib\site-packages")
 
