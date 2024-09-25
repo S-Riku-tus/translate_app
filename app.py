@@ -141,7 +141,7 @@ def save_translated_pdf(df, df_index, pdf_path, file_out, tool='GT'):
 def index():
     return render_template('index.html')
 
-@app.route('/uploads', methods=['POST'])
+@app.route('/upload', methods=['POST'])
 def upload_pdf():
     if 'pdf' not in request.files:
         return redirect(url_for('index'))
@@ -165,8 +165,11 @@ def upload_pdf():
     response = send_file(translated_pdf_path, as_attachment=True)
 
     # 一時ファイルの削除
-    os.remove(pdf_path)
-    os.remove(translated_pdf_path)
+    try:
+        os.remove(pdf_path)
+        os.remove(translated_pdf_path)
+    except PermissionError:
+        print(f"Could not delete file: {pdf_path} or {translated_pdf_path}. It might be in use.")
 
     return response
 
