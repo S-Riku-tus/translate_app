@@ -159,9 +159,15 @@ def upload_pdf():
     translated_pdf_path = os.path.join('uploads', 'translated_' + pdf.filename)
     tool = request.form.get('tool', 'GT')
     save_translated_pdf(df, df_index, pdf_path, translated_pdf_path, tool=tool)
+
+    # ダウンロードオプションの取得
+    download_option = request.form.get('download-option', 'download')
     
-    # 処理が完了したPDFをダウンロード
-    response = send_file(translated_pdf_path, as_attachment=True)
+    if download_option == 'download':
+        response = send_file(translated_pdf_path, as_attachment=True)
+    else:
+        # PDFをブラウザで表示
+        response = send_file(translated_pdf_path)
 
     # 一時ファイルの削除
     try:
