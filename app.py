@@ -134,7 +134,7 @@ def save_translated_pdf(df, df_index, pdf_path, file_out, tool='GT'):
 def index():
     return render_template('index.html')
 
-@app.route('/upload', methods=['POST'])
+@app.route('/uploads', methods=['POST'])
 def upload_pdf():
     if 'pdf' not in request.files:
         return redirect(url_for('index'))
