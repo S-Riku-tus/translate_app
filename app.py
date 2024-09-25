@@ -24,6 +24,12 @@ sys.path.append(r".\transvenv\Lib\site-packages")
 
 app = Flask(__name__)
 
+# uploadsディレクトリを作成
+@app.before_first_request
+def create_uploads_directory():
+    if not os.path.exists('uploads'):
+        os.makedirs('uploads')
+
 # PDFからテキストボックスの情報を抽出
 def find_textboxes(layout):
     if isinstance(layout, LTTextBox):
@@ -154,7 +160,14 @@ def upload_pdf():
     tool = request.form.get('tool', 'GT')
     save_translated_pdf(df, df_index, pdf_path, translated_pdf_path, tool=tool)
     
-    return send_file(translated_pdf_path, as_attachment=True)
+    # 処理が完了したPDFをダウンロード
+    response = send_file(translated_pdf_path, as_attachment=True)
+
+    # 一時ファイルの削除
+    os.remove(pdf_path)
+    os.remove(translated_pdf_path)
+
+    return response
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", debug=False)
