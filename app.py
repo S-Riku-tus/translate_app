@@ -1,3 +1,4 @@
+import io
 from flask import Flask, render_template, request, redirect, url_for, send_file
 import os
 import PyPDF2
@@ -18,7 +19,6 @@ from reportlab.lib.styles import ParagraphStyle
 from pdfminer.layout import LTTextBox, LAParams, LTContainer
 from pdfminer.pdfpage import PDFPage
 from pdfminer.converter import PDFPageAggregator
-import io
 import sys
 sys.path.append(r".\transvenv\Lib\site-packages")
 
@@ -39,8 +39,11 @@ def find_textboxes(layout):
 # 翻訳機能
 translator = Translator()
 
-def translate_text(text):
-    return translator.translate(text, src='en', dest='ja').text
+def translate_text(text, tool='GT'):
+    if tool == "GT":
+        return translator.translate(text, src='en', dest='ja').text
+    # DeepLの実装は別途する必要あり
+    return text
 
 # PDFからテキストを抽出しDataFrameに保存
 def extract_text_from_pdf(pdf_file, margin_input="0.5", min_words=80):
@@ -54,8 +57,8 @@ def extract_text_from_pdf(pdf_file, margin_input="0.5", min_words=80):
     interpreter = PDFPageInterpreter(resourceManager, device)
 
     df = pd.DataFrame()
+    pdf_file.seek(0)  # ストリームのポインタを先頭に戻す
     pdfPages = PDFPage.get_pages(pdf_file)
-
     for page_no, page in enumerate(pdfPages, start=1):
         interpreter.process_page(page)
         layout = device.get_result()
@@ -78,15 +81,14 @@ def extract_text_from_pdf(pdf_file, margin_input="0.5", min_words=80):
     return df, df_index
 
 # 翻訳したPDFを保存
-def save_translated_pdf(df, df_index, pdf_file):
+def save_translated_pdf(df, df_index, pdf_path, file_out):
     font_name = "HeiseiKakuGo-W5"
     pdfmetrics.registerFont(UnicodeCIDFont(font_name))
     buffer = io.BytesIO()  # メモリ上のバッファを作成
-    cc = canvas.Canvas(buffer, pagesize=portrait(A4))
+    cc = canvas.Canvas(buffer, pagesize=portrait(A4))  # bufferを使用
     past_page = -1
 
-    # PyPDF2を使用してPDFを読み込む
-    pdf_reader = PyPDF2.PdfReader(pdf_file)
+    pages = PdfReader(pdf_path, decompress=False).pages
 
     for dd in df_index:
         time.sleep(0.5)
@@ -94,18 +96,14 @@ def save_translated_pdf(df, df_index, pdf_file):
         if nowpage != past_page:
             if past_page != -1:
                 cc.showPage()
-
-            # PyPDF2を使ってページを取得
-            page = pdf_reader.pages[nowpage - 1]
-            cc.setPageSize((page.mediaBox.getWidth(), page.mediaBox.getHeight()))  # ページサイズを設定
-            # ページの内容を描画する
-            cc.drawInlineImage(page.extract_text(), 0, 0)
+            pp = pagexobj(pages[nowpage-1])
+            cc.doForm(makerl(cc, pp))
 
         left_low = [df.iloc[dd, 0], df.iloc[dd, 2]]
         colsize = [df.iloc[dd, 1] - df.iloc[dd, 0], df.iloc[dd, 3] - df.iloc[dd, 2]]
         TEXT = df.iloc[dd, 4]
         try:
-            TEXT_JN = translate_text(TEXT)
+            TEXT_JN = translate_text(TEXT, tool)
         except TypeError:
             TEXT_JN = TEXT
 
@@ -118,21 +116,20 @@ def save_translated_pdf(df, df_index, pdf_file):
         table = Table([[JN_para]], colWidths=colsize[0], rowHeights=colsize[1])
         table.setStyle(TableStyle([
             ('GRID', (0, 0), (-1, -1), 0.1, colors.white),
-            ('VALIGN', (0, 0), (0, -1), 'TOP'),
-            ('BACKGROUND', (0, 0), (0, -1), colors.white)
+            ('VALIGN', 'MIDDLE'),
         ]))
+        
+        # 表を描画
+        table.wrapOn(cc, colsize[0], colsize[1])
+        table.drawOn(cc, left_low[0], left_low[1])
 
-        table.wrapOn(cc, left_low[0], left_low[1])
-        try:
-            table.drawOn(cc, left_low[0], left_low[1])
-        except AttributeError:
-            print("ERROR", nowpage)
-
-        past_page = df.iloc[dd, 5]
+        past_page = nowpage
 
     cc.save()
-    buffer.seek(0)  # バッファのポインタを先頭に戻す
-    return buffer
+    buffer.seek(0)  # バッファの先頭に戻す
+
+    return buffer  # メモリ内のPDFバッファを返す
+
 
 # Flask Routes
 @app.route('/')
@@ -154,17 +151,18 @@ def upload_pdf():
     # PDFからテキストボックスを抽出
     df, df_index = extract_text_from_pdf(pdf_file)
     
-    # 翻訳とPDF生成
-    translated_pdf_buffer = save_translated_pdf(df, df_index, pdf_file)
+    # 翻訳とPDF生成のための出力ファイル名を指定
+    output_filename = f'translated_{pdf.filename}.pdf'
+    translated_pdf_buffer = save_translated_pdf(df, df_index, pdf_file, output_filename)
 
     # ダウンロードオプションの取得
     download_option = request.form.get('download-option', 'download')
     
     if download_option == 'download':
-        response = send_file(translated_pdf_buffer, as_attachment=True, download_name='translated_' + pdf.filename)
+        response = send_file(translated_pdf_buffer, as_attachment=True, download_name=output_filename)
     else:
         # PDFをブラウザで表示
-        response = send_file(translated_pdf_buffer)
+        response = send_file(translated_pdf_buffer, as_attachment=True)
 
     return response
 
