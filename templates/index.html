@@ -1,75 +1,28 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ja">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PDF Translator</title>
-    <style>
-        #drop-area {
-            border: 2px dashed #ccc;
-            border-radius: 20px;
-            width: 400px;
-            height: 200px;
-            margin: 20px auto;
-            text-align: center;
-            padding: 20px;
-        }
-        #drop-area.hover {
-            border-color: #333;
-        }
-    </style>
+    <title>PDF翻訳アプリ</title>
 </head>
 <body>
-    <h1>PDF Translator</h1>
+    <h1>PDF翻訳アプリ</h1>
     <form action="/upload" method="post" enctype="multipart/form-data">
-        <div id="drop-area">
-            <p>Drag & Drop PDF file here</p>
-            <input type="file" id="pdf" name="pdf" accept="application/pdf" style="display: none;">
-        </div>
-        <br>
-        <label for="tool">Translation Tool:</label>
+        <label for="pdf">PDFファイルを選択:</label>
+        <input type="file" id="pdf" name="pdf" accept="application/pdf" required>
+        <br><br>
+        <label for="tool">翻訳ツール:</label>
         <select id="tool" name="tool">
-            <option value="DeepL">DeepL</option>
-            <option value="GT">Google Translate</option>
+            <option value="GT">Google翻訳</option>
         </select>
         <br><br>
-
-        <label for="download-option">Download Option:</label>
+        <label for="download-option">ダウンロードオプション:</label>
         <select id="download-option" name="download-option">
-            <option value="download">Download PDF</option>
-            <option value="view">View in Browser</option>
+            <option value="download">ダウンロード</option>
+            <option value="view">ブラウザで表示</option>
         </select>
         <br><br>
-
-        <button type="submit">Translate PDF</button>
+        <button type="submit">翻訳開始</button>
     </form>
-
-    <script>
-        const dropArea = document.getElementById('drop-area');
-        const fileInput = document.getElementById('pdf');
-
-        dropArea.addEventListener('dragover', (event) => {
-            event.preventDefault();
-            dropArea.classList.add('hover');
-        });
-
-        dropArea.addEventListener('dragleave', () => {
-            dropArea.classList.remove('hover');
-        });
-
-        dropArea.addEventListener('drop', (event) => {
-            event.preventDefault();
-            dropArea.classList.remove('hover');
-            const files = event.dataTransfer.files;
-            if (files.length > 0) {
-                fileInput.files = files;
-                dropArea.querySelector('p').textContent = files[0].name; // Show file name
-            }
-        });
-
-        dropArea.addEventListener('click', () => {
-            fileInput.click(); // Open file dialog when the drop area is clicked
-        });
-    </script>
 </body>
 </html>

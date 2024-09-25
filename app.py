@@ -18,17 +18,11 @@ from reportlab.lib.styles import ParagraphStyle
 from pdfminer.layout import LTTextBox, LAParams, LTContainer
 from pdfminer.pdfpage import PDFPage
 from pdfminer.converter import PDFPageAggregator
+import io
 import sys
 sys.path.append(r".\transvenv\Lib\site-packages")
 
 app = Flask(__name__)
-
-# uploadsディレクトリを作成
-def create_uploads_directory():
-    if not os.path.exists('uploads'):
-        os.makedirs('uploads')
-
-create_uploads_directory()
 
 # PDFからテキストボックスの情報を抽出
 def find_textboxes(layout):
@@ -45,14 +39,11 @@ def find_textboxes(layout):
 # 翻訳機能
 translator = Translator()
 
-def translate_text(text, tool='GT'):
-    if tool == "GT":
-        return translator.translate(text, src='en', dest='ja').text
-    # DeepLの実装は別途する必要あり
-    return text
+def translate_text(text):
+    return translator.translate(text, src='en', dest='ja').text
 
 # PDFからテキストを抽出しDataFrameに保存
-def extract_text_from_pdf(pdf_path, margin_input="0.5", min_words=80):
+def extract_text_from_pdf(pdf_file, margin_input="0.5", min_words=80):
     resourceManager = PDFResourceManager()
     laParams = LAParams(line_overlap=0.5,
                         word_margin=0.1,
@@ -63,23 +54,23 @@ def extract_text_from_pdf(pdf_path, margin_input="0.5", min_words=80):
     interpreter = PDFPageInterpreter(resourceManager, device)
 
     df = pd.DataFrame()
-    with open(pdf_path, 'rb') as fp:
-        pdfPages = PDFPage.get_pages(fp)
-        for page_no, page in enumerate(pdfPages, start=1):
-            interpreter.process_page(page)
-            layout = device.get_result()
-            boxes = find_textboxes(layout)
-            for box in boxes:
-                df_page = pd.DataFrame({
-                    "x_start": [box.x0],
-                    "x_end": [box.x1],
-                    "y_start": [box.y0],
-                    "y_end": [box.y1],
-                    "text": [box.get_text().strip()],
-                    "page": [page_no]
-                })
-                df = pd.concat([df, df_page])
-        df = df.reset_index(drop=True)
+    pdfPages = PDFPage.get_pages(pdf_file)
+
+    for page_no, page in enumerate(pdfPages, start=1):
+        interpreter.process_page(page)
+        layout = device.get_result()
+        boxes = find_textboxes(layout)
+        for box in boxes:
+            df_page = pd.DataFrame({
+                "x_start": [box.x0],
+                "x_end": [box.x1],
+                "y_start": [box.y0],
+                "y_end": [box.y1],
+                "text": [box.get_text().strip()],
+                "page": [page_no]
+            })
+            df = pd.concat([df, df_page])
+    df = df.reset_index(drop=True)
 
     # 翻訳する文章のみフィルタリング
     math_list = [ii for ii, row in df.iterrows() if "=" in row['text'] and "." not in row['text']]
@@ -87,13 +78,14 @@ def extract_text_from_pdf(pdf_path, margin_input="0.5", min_words=80):
     return df, df_index
 
 # 翻訳したPDFを保存
-def save_translated_pdf(df, df_index, pdf_path, file_out, tool='GT'):
+def save_translated_pdf(df, df_index, pdf_file):
     font_name = "HeiseiKakuGo-W5"
     pdfmetrics.registerFont(UnicodeCIDFont(font_name))
-    cc = canvas.Canvas(file_out, pagesize=portrait(A4))
+    buffer = io.BytesIO()  # メモリ上のバッファを作成
+    cc = canvas.Canvas(buffer, pagesize=portrait(A4))
     past_page = -1
 
-    pages = PdfReader(pdf_path, decompress=False).pages
+    pages = PdfReader(pdf_file, decompress=False).pages  # pdf_fileを使用
 
     for dd in df_index:
         time.sleep(0.5)
@@ -108,7 +100,7 @@ def save_translated_pdf(df, df_index, pdf_path, file_out, tool='GT'):
         colsize = [df.iloc[dd, 1] - df.iloc[dd, 0], df.iloc[dd, 3] - df.iloc[dd, 2]]
         TEXT = df.iloc[dd, 4]
         try:
-            TEXT_JN = translate_text(TEXT, tool)
+            TEXT_JN = translate_text(TEXT)
         except TypeError:
             TEXT_JN = TEXT
 
@@ -134,6 +126,8 @@ def save_translated_pdf(df, df_index, pdf_path, file_out, tool='GT'):
         past_page = df.iloc[dd, 5]
 
     cc.save()
+    buffer.seek(0)  # バッファのポインタを先頭に戻す
+    return buffer
 
 # Flask Routes
 @app.route('/')
@@ -149,32 +143,23 @@ def upload_pdf():
     if pdf.filename == '':
         return redirect(url_for('index'))
     
-    pdf_path = os.path.join('uploads', pdf.filename)
-    pdf.save(pdf_path)
+    # PDFファイルをメモリ上で処理
+    pdf_file = pdf.stream  # 直接メモリのストリームを取得
     
     # PDFからテキストボックスを抽出
-    df, df_index = extract_text_from_pdf(pdf_path)
+    df, df_index = extract_text_from_pdf(pdf_file)
     
     # 翻訳とPDF生成
-    translated_pdf_path = os.path.join('uploads', 'translated_' + pdf.filename)
-    tool = request.form.get('tool', 'GT')
-    save_translated_pdf(df, df_index, pdf_path, translated_pdf_path, tool=tool)
+    translated_pdf_buffer = save_translated_pdf(df, df_index, pdf_file)
 
     # ダウンロードオプションの取得
     download_option = request.form.get('download-option', 'download')
     
     if download_option == 'download':
-        response = send_file(translated_pdf_path, as_attachment=True)
+        response = send_file(translated_pdf_buffer, as_attachment=True, download_name='translated_' + pdf.filename)
     else:
         # PDFをブラウザで表示
-        response = send_file(translated_pdf_path)
-
-    # 一時ファイルの削除
-    try:
-        os.remove(pdf_path)
-        os.remove(translated_pdf_path)
-    except PermissionError:
-        print(f"Could not delete file: {pdf_path} or {translated_pdf_path}. It might be in use.")
+        response = send_file(translated_pdf_buffer)
 
     return response
 
