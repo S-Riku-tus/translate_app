@@ -25,10 +25,11 @@ sys.path.append(r".\transvenv\Lib\site-packages")
 app = Flask(__name__)
 
 # uploadsディレクトリを作成
-@app.before_first_request
 def create_uploads_directory():
     if not os.path.exists('uploads'):
         os.makedirs('uploads')
+
+create_uploads_directory()
 
 # PDFからテキストボックスの情報を抽出
 def find_textboxes(layout):
