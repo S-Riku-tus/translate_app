@@ -85,7 +85,8 @@ def save_translated_pdf(df, df_index, pdf_file):
     cc = canvas.Canvas(buffer, pagesize=portrait(A4))
     past_page = -1
 
-    pages = PdfReader(pdf_file, decompress=False).pages  # pdf_fileを使用
+    # PyPDF2を使用してPDFを読み込む
+    pdf_reader = PyPDF2.PdfReader(pdf_file)
 
     for dd in df_index:
         time.sleep(0.5)
@@ -93,8 +94,12 @@ def save_translated_pdf(df, df_index, pdf_file):
         if nowpage != past_page:
             if past_page != -1:
                 cc.showPage()
-            pp = pagexobj(pages[nowpage-1])
-            cc.doForm(makerl(cc, pp))
+
+            # PyPDF2を使ってページを取得
+            page = pdf_reader.pages[nowpage - 1]
+            cc.setPageSize((page.mediaBox.getWidth(), page.mediaBox.getHeight()))  # ページサイズを設定
+            # ページの内容を描画する
+            cc.drawInlineImage(page.extract_text(), 0, 0)
 
         left_low = [df.iloc[dd, 0], df.iloc[dd, 2]]
         colsize = [df.iloc[dd, 1] - df.iloc[dd, 0], df.iloc[dd, 3] - df.iloc[dd, 2]]
