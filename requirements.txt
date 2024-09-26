@@ -5,3 +5,4 @@ pdfrw==0.4
 reportlab==4.2.2
 PyPDF2==3.0.1
 pdfminer.six==20201018
+PyMuPDF-1.24.10
